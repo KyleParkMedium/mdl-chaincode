@@ -2,16 +2,21 @@ package chaincode
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash"
 	"log"
 	"strconv"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
-	"golang.org/x/crypto/sha3"
+)
+
+// Changelog
+const (
+	Author           = "Kyle"
+	DateCreated      = "2022/10/28"
+	ChaincodeName    = "STO TOKEN Standard"
+	ChaincodeVersion = "0.0.1"
 )
 
 const (
@@ -21,34 +26,16 @@ const (
 
 	// Define objectType names for prefix
 	// minterKeyPrefix = "minter"
-	minterPartitionPrefix    = "minterPartition"
-	allowancePartitionPrefix = "allowance"
+	minterByPartitionPrefix    = "minterByPartition"
+	allowanceByPartitionPrefix = "allowanceByPartition"
 
-	// Define client, 자산 분할
-	// clientPrefix          = "client"
-	clientPartitionPrefix = "clientPartition"
-
-	totalSupplyPrefix = "totalSupplyPartition"
+	// Define client, asset By Partition
+	clientByPartitionPrefix      = "clientByPartition"
+	totalSupplyByPartitionPrefix = "totalSupplyPartition"
 
 	// AddressLength is the expected length of the address
 	addressLength = 20
 )
-
-// Errors
-var (
-	ErrEmptyString   = &decError{"empty hex string"}
-	ErrMissingPrefix = &decError{"hex string without 0x prefix"}
-	ErrUint64Range   = &decError{"hex number > 64 bits"}
-	ErrSyntax        = &decError{"invalid hex string"}
-	ErrOddLength     = &decError{"hex string of odd length"}
-)
-
-type decError struct{ msg string }
-
-func (err decError) Error() string { return err.msg }
-
-// Address represents the 20 byte address of an Ethereum account.
-type Address [addressLength]byte
 
 // SmartContract provides functions for transferring tokens between accounts
 type SmartContract struct {
@@ -91,97 +78,6 @@ type PartitionToken struct {
 	Locked    bool      `json:"locked"`
 	Partition Partition `json:"partition"`
 }
-
-func getAddress(id []byte) string {
-	return Encode(bytesToAddress(Keccak256([]byte(id))[12:]).Bytes())
-}
-
-func has0xPrefix(input string) bool {
-	return len(input) >= 2 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')
-}
-
-func mapError(err error) error {
-	if err, ok := err.(*strconv.NumError); ok {
-		switch err.Err {
-		case strconv.ErrRange:
-			return ErrUint64Range
-		case strconv.ErrSyntax:
-			return ErrSyntax
-		}
-	}
-	if _, ok := err.(hex.InvalidByteError); ok {
-		return ErrSyntax
-	}
-	if err == hex.ErrLength {
-		return ErrOddLength
-	}
-	return err
-}
-
-// Decode decodes a hex string with 0x prefix.
-func Decode(input string) ([]byte, error) {
-	if len(input) == 0 {
-		return nil, ErrEmptyString
-	}
-	if !has0xPrefix(input) {
-		return nil, ErrMissingPrefix
-	}
-	b, err := hex.DecodeString(input[2:])
-	if err != nil {
-		err = mapError(err)
-	}
-	return b, err
-}
-
-// Encode encodes b as a hex string with 0x prefix.
-func Encode(b []byte) string {
-	enc := make([]byte, len(b)*2+2)
-	copy(enc, "0x")
-	hex.Encode(enc[2:], b)
-	return string(enc)
-}
-
-// KeccakState wraps sha3.state. In addition to the usual hash methods, it also supports
-// Read to get a variable amount of data from the hash state. Read is faster than Sum
-// because it doesn't copy the internal state, but also modifies the internal state.
-type KeccakState interface {
-	hash.Hash
-	Read([]byte) (int, error)
-}
-
-// NewKeccakState creates a new KeccakState
-func NewKeccakState() KeccakState {
-	return sha3.NewLegacyKeccak256().(KeccakState)
-}
-
-// Keccak256 calculates and returns the Keccak256 hash of the input data.
-func Keccak256(data ...[]byte) []byte {
-	b := make([]byte, 32)
-	d := NewKeccakState()
-	for _, b := range data {
-		d.Write(b)
-	}
-	d.Read(b)
-	return b
-}
-
-func bytesToAddress(b []byte) Address {
-	var a Address
-	a.SetBytes(b)
-	return a
-}
-
-// SetBytes sets the address to the value of b.
-// If b is larger than len(a), b will be cropped from the left.
-func (a *Address) SetBytes(b []byte) {
-	if len(b) > len(a) {
-		b = b[len(b)-addressLength:]
-	}
-	copy(a[addressLength-len(b):], b)
-}
-
-// Bytes gets the string representation of the underlying address.
-func (a Address) Bytes() []byte { return a[:] }
 
 // ERC20 Strandard Code
 /**
@@ -229,7 +125,7 @@ func (s *SmartContract) TotalSupplyByPartition(ctx contractapi.TransactionContex
 	}
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyPrefix, []string{partition})
+	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
 	if err != nil {
 		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
 	}
@@ -263,9 +159,9 @@ func (s *SmartContract) BalanceOfByPartition(ctx contractapi.TransactionContextI
 	}
 
 	// Create allowanceKey
-	clientKey, err := ctx.GetStub().CreateCompositeKey(clientPartitionPrefix, []string{_tokenHolder, _partition})
+	clientKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{_tokenHolder, _partition})
 	if err != nil {
-		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", clientPartitionPrefix, err)
+		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", clientByPartitionPrefix, err)
 	}
 
 	balanceByPartitionBytes, err := ctx.GetStub().GetState(clientKey)
@@ -308,10 +204,10 @@ func (s *SmartContract) AllowanceByPartition(ctx contractapi.TransactionContextI
 	}
 
 	// Create allowanceKey
-	allowancePartitionKey, err := ctx.GetStub().CreateCompositeKey(allowancePartitionPrefix, []string{owner, spender, partition})
+	allowancePartitionKey, err := ctx.GetStub().CreateCompositeKey(allowanceByPartitionPrefix, []string{owner, spender, partition})
 	if err != nil {
-		// return 0, "", fmt.Errorf("failed to create the composite key for prefix %s: %v", allowancePartitionPrefix, err)
-		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", allowancePartitionPrefix, err)
+		// return 0, "", fmt.Errorf("failed to create the composite key for prefix %s: %v", allowanceByPartitionPrefix, err)
+		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", allowanceByPartitionPrefix, err)
 	}
 
 	// Read the allowance amount from the world state
@@ -466,9 +362,9 @@ func (s *SmartContract) DecreaseAllowanceByPartition(ctx contractapi.Transaction
 func _approveByPartition(ctx contractapi.TransactionContextInterface, owner string, spender string, partition string, value int) error {
 
 	// Create allowanceKey
-	allowancePartitionKey, err := ctx.GetStub().CreateCompositeKey(allowancePartitionPrefix, []string{owner, spender, partition})
+	allowancePartitionKey, err := ctx.GetStub().CreateCompositeKey(allowanceByPartitionPrefix, []string{owner, spender, partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", allowancePartitionPrefix, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", allowanceByPartitionPrefix, err)
 	}
 
 	// Update the state of the smart contract by adding the allowanceKey and value
@@ -570,9 +466,9 @@ func (s *SmartContract) TransferFromByPartition(ctx contractapi.TransactionConte
 	// Decrease the allowance
 	updatedAllowance := allowance - value
 	// Create allowanceKey
-	allowancePartitionKey, err := ctx.GetStub().CreateCompositeKey(allowancePartitionPrefix, []string{from, spender, partition})
+	allowancePartitionKey, err := ctx.GetStub().CreateCompositeKey(allowanceByPartitionPrefix, []string{from, spender, partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", allowancePartitionPrefix, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", allowanceByPartitionPrefix, err)
 	}
 	err = ctx.GetStub().PutState(allowancePartitionKey, []byte(strconv.Itoa(updatedAllowance)))
 	if err != nil {
@@ -597,9 +493,9 @@ func (s *SmartContract) TransferFromByPartition(ctx contractapi.TransactionConte
 func _transferByPartition(ctx contractapi.TransactionContextInterface, from string, to string, partition string, value int) error {
 
 	// Create allowanceKey
-	fromKey, err := ctx.GetStub().CreateCompositeKey(clientPartitionPrefix, []string{from, partition})
+	fromKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{from, partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientPartitionPrefix, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientByPartitionPrefix, err)
 	}
 
 	fromTokenBytes, err := ctx.GetStub().GetState(fromKey)
@@ -622,9 +518,9 @@ func _transferByPartition(ctx contractapi.TransactionContextInterface, from stri
 	}
 
 	// Create allowanceKey
-	toKey, err := ctx.GetStub().CreateCompositeKey(clientPartitionPrefix, []string{to, partition})
+	toKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{to, partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientPartitionPrefix, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientByPartitionPrefix, err)
 	}
 	toTokenBytes, err := ctx.GetStub().GetState(toKey)
 	if err != nil {
@@ -774,12 +670,12 @@ func (s *SmartContract) AdminMint(ctx contractapi.TransactionContextInterface) (
 	// }
 
 	// Create 자산
-	minterPartitionKey, err := ctx.GetStub().CreateCompositeKey(minterPartitionPrefix, []string{address, exampleMoney})
+	minterByPartitionKey, err := ctx.GetStub().CreateCompositeKey(minterByPartitionPrefix, []string{address, exampleMoney})
 	if err != nil {
-		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", minterPartitionPrefix, err)
+		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", minterByPartitionPrefix, err)
 	}
 
-	tokenBytes, err := ctx.GetStub().GetState(minterPartitionKey)
+	tokenBytes, err := ctx.GetStub().GetState(minterByPartitionKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to read minter account %s from world state: %v", address, err)
 	}
@@ -794,7 +690,7 @@ func (s *SmartContract) AdminMint(ctx contractapi.TransactionContextInterface) (
 	if err != nil {
 		return "", fmt.Errorf("failed to obtain JSON encoding: %v", err)
 	}
-	err = ctx.GetStub().PutState(minterPartitionKey, tokenJSON)
+	err = ctx.GetStub().PutState(minterByPartitionKey, tokenJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to put state: %v", err)
 	}
@@ -802,7 +698,7 @@ func (s *SmartContract) AdminMint(ctx contractapi.TransactionContextInterface) (
 	log.Printf("자산 %s registered", randomAddress)
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyPrefix, []string{exampleMoney})
+	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{exampleMoney})
 	if err != nil {
 		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
 	}
@@ -840,9 +736,9 @@ func (s *SmartContract) ClientByPartition(ctx contractapi.TransactionContextInte
 	// value, found, err := ctx.GetClientIdentity().GetAttributeValue("roles")
 
 	// Create allowanceKey
-	clientKey, err := ctx.GetStub().CreateCompositeKey(clientPartitionPrefix, []string{address, partition})
+	clientKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{address, partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientPartitionPrefix, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientByPartitionPrefix, err)
 	}
 
 	clientAmountBytes, err := ctx.GetStub().GetState(clientKey)
@@ -909,9 +805,9 @@ func (s *SmartContract) MintByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// Create allowanceKey
-	clientKey, err := ctx.GetStub().CreateCompositeKey(clientPartitionPrefix, []string{address, partition})
+	clientKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{address, partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientPartitionPrefix, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientByPartitionPrefix, err)
 	}
 
 	tokenBytes, err := ctx.GetStub().GetState(clientKey)
@@ -970,7 +866,7 @@ func (s *SmartContract) MintByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyPrefix, []string{partition})
+	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
 	if err != nil {
 		return fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
 	}
@@ -1038,9 +934,9 @@ func (s *SmartContract) BurnByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// Create allowanceKey
-	clientKey, err := ctx.GetStub().CreateCompositeKey(clientPartitionPrefix, []string{address, partition})
+	clientKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{address, partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientPartitionPrefix, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", clientByPartitionPrefix, err)
 	}
 
 	tokenBytes, err := ctx.GetStub().GetState(clientKey)
@@ -1102,7 +998,7 @@ func (s *SmartContract) BurnByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyPrefix, []string{partition})
+	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
 	if err != nil {
 		return fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
 	}
@@ -1188,9 +1084,9 @@ func (s *SmartContract) ClientAccountBalanceByPartition(ctx contractapi.Transact
 	owner := getAddress([]byte(id))
 
 	// Create allowanceKey
-	clientPartitionKey, err := ctx.GetStub().CreateCompositeKey(clientPartitionPrefix, []string{owner, _partition})
+	clientPartitionKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{owner, _partition})
 	if err != nil {
-		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", clientPartitionPrefix, err)
+		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", clientByPartitionPrefix, err)
 	}
 
 	tokenBytes, err := ctx.GetStub().GetState(clientPartitionKey)
@@ -1214,4 +1110,33 @@ func (s *SmartContract) ClientAccountBalanceByPartition(ctx contractapi.Transact
 	}
 
 	return token.Partition.Amount, nil
+}
+
+func (s *SmartContract) TestGetSignedProposal(ctx contractapi.TransactionContextInterface) (int, error) {
+
+	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
+	err := _getMSPID(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	// Retrieve total supply of tokens from state of smart contract
+	totalSupplyBytes, err := ctx.GetStub().GetState(totalSupplyKey)
+	if err != nil {
+		return 0, fmt.Errorf("failed to retrieve total token supply: %v", err)
+	}
+
+	var totalSupply int
+
+	// If no tokens have been minted, return 0
+	if totalSupplyBytes == nil {
+		totalSupply = 0
+	} else {
+		totalSupply, _ = strconv.Atoi(string(totalSupplyBytes)) // Error handling not needed since Itoa() was used when setting the totalSupply, guaranteeing it was an integer.
+	}
+
+	log.Printf("TotalSupply: %d tokens", totalSupply)
+
+	return totalSupply, nil
+
 }
