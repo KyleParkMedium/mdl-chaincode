@@ -1,11 +1,11 @@
 package chaincode
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"mdl-chaincode/chaincode/ccutils"
 	"strconv"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
@@ -24,17 +24,19 @@ const (
 	totalSupplyKey = "totalSupply"
 	tokenName      = "mdl"
 
-	// Define objectType names for prefix
-	// minterKeyPrefix = "minter"
-	minterByPartitionPrefix    = "minterByPartition"
+	// Define objectType names by partition for prefix
+	totalSupplyByPartitionPrefix = "totalSupplyByPartition"
+
+	// _allowances
 	allowanceByPartitionPrefix = "allowanceByPartition"
 
-	// Define client, asset By Partition
-	clientByPartitionPrefix      = "clientByPartition"
-	totalSupplyByPartitionPrefix = "totalSupplyPartition"
+	// issue or mint partition token
+	mintingByPartitionPrefix = "mintingByPartition"
+	clientByPartitionPrefix  = "clientByPartition"
 
-	// AddressLength is the expected length of the address
-	addressLength = 20
+	clientWalletPrefix = "clientWallet"
+
+	operatorForPartitionPrefix = "operatorForPartition"
 )
 
 // SmartContract provides functions for transferring tokens between accounts
@@ -50,18 +52,13 @@ type Event struct {
 }
 
 // Represents a fungible set of tokens.
-type TotalSupplyPartition struct {
+type TotalSupplyByPartition struct {
 	TotalSupply int
 	// Partition Address
 	Partition string
 }
 
 // Represents a fungible set of tokens.
-type Partition struct {
-	Amount int
-	// Partition Address
-	Partition string
-}
 
 // token
 type Token struct {
@@ -71,11 +68,49 @@ type Token struct {
 	Locked bool   `json:"locked"`
 }
 
+// address or wallet
+type Wallet struct {
+	DocType string `json:"docType"`
+	Name    string `json:"name"`
+
+	AuthWalletId string `json:"authWalletId"`
+	CreatedDate  string `json:"createdDate"`
+	UpdatedDate  string `json:"updatedDate"`
+	ExpiredDate  string `json:"expiredDate"`
+
+	AA map[string]struct{}
+
+	BB []PartitionToken
+
+	CC interface{}
+
+	// 배열로..?
+	PartitionToken Partition
+}
+
+type Partition struct {
+	Amount int
+	// Partition Address
+	Partition string
+}
+
 // partition Token
 type PartitionToken struct {
-	Name      string    `json:"name"`
-	ID        string    `json:"id"`
-	Locked    bool      `json:"locked"`
+	DocType string `json:"docType"`
+
+	Name   string `json:"name"`
+	ID     string `json:"id"`
+	Locked bool   `json:"locked"`
+
+	Publisher string `json:"publisher"`
+
+	ExpiredDate string `json:"expiredDate"`
+	CreatedDate string `json:"createdDate"`
+	UpdatedDate string `json:"updatedDate"`
+
+	TxId string `json:"txId"`
+
+	// 요기가 fix 될 예정
 	Partition Partition `json:"partition"`
 }
 
@@ -109,7 +144,6 @@ func (s *SmartContract) TotalSupply(ctx contractapi.TransactionContextInterface)
 	log.Printf("TotalSupply: %d tokens", totalSupply)
 
 	return totalSupply, nil
-
 }
 
 // ERC20 Strandard Code
@@ -125,23 +159,24 @@ func (s *SmartContract) TotalSupplyByPartition(ctx contractapi.TransactionContex
 	}
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
+	totalSupplyByPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
 	if err != nil {
-		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
+		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyByPartitionKey, err)
 	}
 
 	// Retrieve total supply of tokens from state of smart contract
-	totalSupplyPartitionBytes, err := ctx.GetStub().GetState(totalSupplyPartitionKey)
+	totalSupplyByPartitionBytes, err := ctx.GetStub().GetState(totalSupplyByPartitionKey)
 	if err != nil {
 		return 0, fmt.Errorf("failed to retrieve total token supply: %v", err)
 	}
+
 	// If no tokens have been minted, return 0
-	if totalSupplyPartitionBytes == nil {
+	if totalSupplyByPartitionBytes == nil {
 		return 0, nil
 	}
 
-	supplyToken := new(TotalSupplyPartition)
-	err = json.Unmarshal(totalSupplyPartitionBytes, supplyToken)
+	supplyToken := new(TotalSupplyByPartition)
+	err = json.Unmarshal(totalSupplyByPartitionBytes, supplyToken)
 	if err != nil {
 		return 0, fmt.Errorf("failed to obtain JSON decoding: %v", err)
 	}
@@ -173,7 +208,7 @@ func (s *SmartContract) BalanceOfByPartition(ctx contractapi.TransactionContextI
 		return 0, fmt.Errorf("the account %s does not exist", _tokenHolder)
 	}
 
-	// // 이런 조건절 함수를 패브릭에서는 어디에서 처리를 해주어야 할까?
+	// // 이런 이더리움의 조건절 함수를 패브릭에서는 어디에서 처리를 해주어야 할까?
 	// if _validPartition(result._partition, result.owner) {
 	// 	return partitions[owner][partitionToIndex[owner][_partition]-1].amount
 	// } else {
@@ -206,14 +241,12 @@ func (s *SmartContract) AllowanceByPartition(ctx contractapi.TransactionContextI
 	// Create allowanceKey
 	allowancePartitionKey, err := ctx.GetStub().CreateCompositeKey(allowanceByPartitionPrefix, []string{owner, spender, partition})
 	if err != nil {
-		// return 0, "", fmt.Errorf("failed to create the composite key for prefix %s: %v", allowanceByPartitionPrefix, err)
 		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", allowanceByPartitionPrefix, err)
 	}
 
 	// Read the allowance amount from the world state
 	allowanceBytes, err := ctx.GetStub().GetState(allowancePartitionKey)
 	if err != nil {
-		// return 0, "", fmt.Errorf("failed to read allowance for %s from world state: %v", allowanceKey, err)
 		return 0, fmt.Errorf("failed to read allowance for %s from world state: %v", allowancePartitionKey, err)
 	}
 
@@ -225,12 +258,10 @@ func (s *SmartContract) AllowanceByPartition(ctx contractapi.TransactionContextI
 	} else {
 		allowance, err = strconv.Atoi(string(allowanceBytes)) // Error handling not needed since Itoa() was used when setting the totalSupply, guaranteeing it was an integer.
 		if err != nil {
-			// return 0, "", fmt.Errorf("failed to convert string to integer: %v", err)
 			return 0, fmt.Errorf("failed to convert string to integer: %v", err)
 		}
 	}
-	// allowanceKey
-	// return allowance, allowanceKey, nil
+
 	return allowance, nil
 }
 
@@ -257,7 +288,7 @@ func (s *SmartContract) ApproveByPartition(ctx contractapi.TransactionContextInt
 	}
 
 	// owner Address
-	owner := getAddress([]byte(id))
+	owner := ccutils.GetAddress([]byte(id))
 
 	err = _approveByPartition(ctx, owner, spender, partition, amount)
 	if err != nil {
@@ -291,7 +322,7 @@ func (s *SmartContract) IncreaseAllowanceByPartition(ctx contractapi.Transaction
 	}
 
 	// owner Address
-	owner := getAddress([]byte(id))
+	owner := ccutils.GetAddress([]byte(id))
 
 	if addedValue <= 0 { // transfer of 0 is allowed in ERC-20, so just validate against negative amounts
 		return fmt.Errorf("addValue cannot be negative")
@@ -329,7 +360,7 @@ func (s *SmartContract) DecreaseAllowanceByPartition(ctx contractapi.Transaction
 	}
 
 	// owner Address
-	owner := getAddress([]byte(id))
+	owner := ccutils.GetAddress([]byte(id))
 
 	if subtractedValue <= 0 { // transfer of 0 is allowed in ERC-20, so just validate against negative amounts
 		return fmt.Errorf("subtractedValue cannot be negative")
@@ -338,7 +369,7 @@ func (s *SmartContract) DecreaseAllowanceByPartition(ctx contractapi.Transaction
 	allowanceValue, err := s.AllowanceByPartition(ctx, owner, spender, partition)
 
 	if allowanceValue < subtractedValue {
-		return fmt.Errorf("허용량 보다 뺄셈이 많음 ERC20: decreased allowance below zero", err)
+		return fmt.Errorf("The subtraction is greater than the allowable amount. ERC20: decreased allowance below zero : %v", err)
 	}
 
 	err = _approveByPartition(ctx, owner, spender, partition, allowanceValue-subtractedValue)
@@ -412,7 +443,7 @@ func (s *SmartContract) TransferByPartition(ctx contractapi.TransactionContextIn
 	}
 
 	// owner Address
-	owner := getAddress([]byte(id))
+	owner := ccutils.GetAddress([]byte(id))
 
 	if amount <= 0 {
 		return false, fmt.Errorf("mint amount must be a positive integer")
@@ -447,7 +478,7 @@ func (s *SmartContract) TransferFromByPartition(ctx contractapi.TransactionConte
 	}
 
 	// owner Address
-	spender := getAddress([]byte(id))
+	spender := ccutils.GetAddress([]byte(id))
 
 	// allowance, allowanceKey, _ := s.Allowance(ctx, from, spender)
 	allowance, err := s.AllowanceByPartition(ctx, from, spender, partition)
@@ -456,7 +487,7 @@ func (s *SmartContract) TransferFromByPartition(ctx contractapi.TransactionConte
 	}
 
 	if allowance < value {
-		return fmt.Errorf("허용량이 더 작습니다")
+		return fmt.Errorf("Allowance is less than value")
 	}
 
 	if value <= 0 { // transfer of 0 is allowed in ERC-20, so just validate against negative amounts
@@ -578,7 +609,9 @@ func _transferByPartition(ctx contractapi.TransactionContextInterface, from stri
 
 /** 체인코드 init 위해 임시로 코드 작성
  */
-func (s *SmartContract) Imsy(ctx contractapi.TransactionContextInterface) error {
+func (s *SmartContract) IsInit(ctx contractapi.TransactionContextInterface) error {
+
+	log.Printf("Initial Isinit run")
 
 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
 	err := _getMSPID(ctx)
@@ -586,8 +619,8 @@ func (s *SmartContract) Imsy(ctx contractapi.TransactionContextInterface) error 
 		return err
 	}
 
-	// Update the state of the smart contract by adding the allowanceKey and value
-	err = ctx.GetStub().PutState("imsy", []byte("imsy"))
+	// Initial Isinit run
+	err = ctx.GetStub().PutState("Isinit", []byte("Isinit"))
 	if err != nil {
 		return err
 	}
@@ -611,7 +644,7 @@ func (s *SmartContract) Init(ctx contractapi.TransactionContextInterface) (strin
 	}
 
 	// owner Address
-	owner := getAddress([]byte(id))
+	owner := ccutils.GetAddress([]byte(id))
 
 	return owner, nil
 }
@@ -642,7 +675,7 @@ func _getMSPID(ctx contractapi.TransactionContextInterface) error {
 	return nil
 }
 
-func (s *SmartContract) AdminMint(ctx contractapi.TransactionContextInterface) (string, error) {
+func (s *SmartContract) IssuanceAsset(ctx contractapi.TransactionContextInterface, partition string) (string, error) {
 
 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
 	err := _getMSPID(ctx)
@@ -656,67 +689,64 @@ func (s *SmartContract) AdminMint(ctx contractapi.TransactionContextInterface) (
 	}
 
 	// owner Address
-	address := getAddress([]byte(id))
+	address := ccutils.GetAddress([]byte(id))
 
-	// 자산 랜덤 바이트 생성
-	randomByte := make([]byte, 20)
-	rand.Read(randomByte)
-	randomAddress := getAddress(randomByte)
-	exampleMoney := getAddress([]byte("imsyMoney"))
+	// Generate random bytes of assets
+	partitionAddress := ccutils.GetAddress([]byte(partition))
 
 	// minter := string(minterBytes)
-	// if minter != getAddress([]byte(id)) {
+	// if minter != ccutils.GetAddress([]byte(id)) {
 	// 	return fmt.Errorf("client is not authorized to mint new tokens")
 	// }
 
-	// Create 자산
-	minterByPartitionKey, err := ctx.GetStub().CreateCompositeKey(minterByPartitionPrefix, []string{address, exampleMoney})
+	// Create Asset
+	mintingByPartitionKey, err := ctx.GetStub().CreateCompositeKey(mintingByPartitionPrefix, []string{address, partitionAddress})
 	if err != nil {
-		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", minterByPartitionPrefix, err)
+		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", mintingByPartitionPrefix, err)
 	}
 
-	tokenBytes, err := ctx.GetStub().GetState(minterByPartitionKey)
+	tokenBytes, err := ctx.GetStub().GetState(mintingByPartitionKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to read minter account %s from world state: %v", address, err)
 	}
 
 	if tokenBytes != nil {
-		return "", fmt.Errorf("해당 자산 이미 등록 : %s, %v", randomAddress, err)
+		return "", fmt.Errorf("The asset is already registered : %s, %v", partitionAddress, err)
 	}
 
-	example := Partition{Amount: 0, Partition: exampleMoney}
-	token := PartitionToken{"tokenName", address, false, example}
+	example := Partition{Amount: 0, Partition: partitionAddress}
+	token := PartitionToken{Name: "tokenName", ID: address, Locked: false, Partition: example}
 	tokenJSON, err := json.Marshal(token)
 	if err != nil {
 		return "", fmt.Errorf("failed to obtain JSON encoding: %v", err)
 	}
-	err = ctx.GetStub().PutState(minterByPartitionKey, tokenJSON)
+	err = ctx.GetStub().PutState(mintingByPartitionKey, tokenJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to put state: %v", err)
 	}
 
-	log.Printf("자산 %s registered", randomAddress)
+	log.Printf("The Asset %s is registered", partitionAddress)
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{exampleMoney})
+	totalSupplyByPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partitionAddress})
 	if err != nil {
-		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
+		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyByPartitionKey, err)
 	}
 
-	supplyToken := TotalSupplyPartition{TotalSupply: 0, Partition: exampleMoney}
+	supplyToken := TotalSupplyByPartition{TotalSupply: 0, Partition: partitionAddress}
 	supplyTokenJSON, err := json.Marshal(supplyToken)
 	if err != nil {
 		return "", fmt.Errorf("failed to obtain JSON encoding: %v", err)
 	}
-	err = ctx.GetStub().PutState(totalSupplyPartitionKey, supplyTokenJSON)
+	err = ctx.GetStub().PutState(totalSupplyByPartitionKey, supplyTokenJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to put state: %v", err)
 	}
 
-	return exampleMoney, nil
+	return partitionAddress, nil
 }
 
-// Client Chaincode Initialize
+// Client Account Initialize
 func (s *SmartContract) ClientByPartition(ctx contractapi.TransactionContextInterface, partition string) error {
 
 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
@@ -731,7 +761,7 @@ func (s *SmartContract) ClientByPartition(ctx contractapi.TransactionContextInte
 	}
 
 	// owner Address
-	address := getAddress([]byte(id))
+	address := ccutils.GetAddress([]byte(id))
 
 	// value, found, err := ctx.GetClientIdentity().GetAttributeValue("roles")
 
@@ -749,8 +779,9 @@ func (s *SmartContract) ClientByPartition(ctx contractapi.TransactionContextInte
 		return fmt.Errorf("client %s has been already registered: %v", address, err)
 	}
 
-	example := Partition{Amount: 0, Partition: partition}
-	token := PartitionToken{"tokenName", address, false, example}
+	// example := Partition{Amount: 0, Partition: partition}
+	token := PartitionToken{Name: "token"}
+	// token := PartitionToken{"token", "tokenName", address, false, example}
 	tokenJSON, err := json.Marshal(token)
 	if err != nil {
 		return fmt.Errorf("failed to obtain JSON encoding: %v", err)
@@ -788,7 +819,7 @@ func (s *SmartContract) MintByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// owner Address
-	address := getAddress([]byte(id))
+	address := ccutils.GetAddress([]byte(id))
 
 	// minterBytes, err := ctx.GetStub().GetState(minterKey)
 	// if err != nil {
@@ -796,7 +827,7 @@ func (s *SmartContract) MintByPartition(ctx contractapi.TransactionContextInterf
 	// }
 
 	// minter := string(minterBytes)
-	// if minter != getAddress([]byte(id)) {
+	// if minter != ccutils.GetAddress([]byte(id)) {
 	// 	return fmt.Errorf("client is not authorized to mint new tokens")
 	// }
 
@@ -815,7 +846,7 @@ func (s *SmartContract) MintByPartition(ctx contractapi.TransactionContextInterf
 		return fmt.Errorf("failed to read minter account %s from world state: %v", address, err)
 	}
 	if tokenBytes == nil {
-		return fmt.Errorf("호출한 클라이언트의 정보가 없습니다.")
+		return fmt.Errorf("The information of the calling client does not exist.")
 	}
 
 	token := new(PartitionToken)
@@ -843,7 +874,7 @@ func (s *SmartContract) MintByPartition(ctx contractapi.TransactionContextInterf
 		return fmt.Errorf("failed to put state: %v", err)
 	}
 
-	// Update the totalSupply, totalSupplyPartition
+	// Update the totalSupply, totalSupplyByPartition
 	totalSupplyBytes, err := ctx.GetStub().GetState(totalSupplyKey)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve total token supply: %v", err)
@@ -866,31 +897,31 @@ func (s *SmartContract) MintByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
+	totalSupplyByPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyByPartitionKey, err)
 	}
 
-	totalSupplyPartitionBytes, err := ctx.GetStub().GetState(totalSupplyPartitionKey)
+	totalSupplyByPartitionBytes, err := ctx.GetStub().GetState(totalSupplyByPartitionKey)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve total token supply: %v", err)
 	}
 
-	supplyToken := new(TotalSupplyPartition)
-	err = json.Unmarshal(totalSupplyPartitionBytes, supplyToken)
+	supplyToken := new(TotalSupplyByPartition)
+	err = json.Unmarshal(totalSupplyByPartitionBytes, supplyToken)
 	if err != nil {
 		return fmt.Errorf("failed to obtain JSON decoding: %v", err)
 	}
 
-	totalSupplyPartition := supplyToken.TotalSupply
-	updateTotalSupply := totalSupplyPartition + amount
+	totalSupplyByPartition := supplyToken.TotalSupply
+	updateTotalSupply := totalSupplyByPartition + amount
 	supplyToken.TotalSupply = updateTotalSupply
 
 	supplyTokenJSON, err := json.Marshal(supplyToken)
 	if err != nil {
 		return fmt.Errorf("failed to obtain JSON encoding: %v", err)
 	}
-	err = ctx.GetStub().PutState(totalSupplyPartitionKey, supplyTokenJSON)
+	err = ctx.GetStub().PutState(totalSupplyByPartitionKey, supplyTokenJSON)
 	if err != nil {
 		return fmt.Errorf("failed to put state: %v", err)
 	}
@@ -927,7 +958,7 @@ func (s *SmartContract) BurnByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// owner Address
-	address := getAddress([]byte(id))
+	address := ccutils.GetAddress([]byte(id))
 
 	if amount <= 0 {
 		return fmt.Errorf("mint amount must be a positive integer")
@@ -998,31 +1029,31 @@ func (s *SmartContract) BurnByPartition(ctx contractapi.TransactionContextInterf
 	}
 
 	// Create allowanceKey
-	totalSupplyPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
+	totalSupplyByPartitionKey, err := ctx.GetStub().CreateCompositeKey(totalSupplyByPartitionPrefix, []string{partition})
 	if err != nil {
-		return fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyPartitionKey, err)
+		return fmt.Errorf("failed to create the composite key for prefix %s: %v", totalSupplyByPartitionKey, err)
 	}
 
-	totalSupplyPartitionBytes, err := ctx.GetStub().GetState(totalSupplyPartitionKey)
+	totalSupplyByPartitionBytes, err := ctx.GetStub().GetState(totalSupplyByPartitionKey)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve total token supply: %v", err)
 	}
 
-	supplyToken := new(TotalSupplyPartition)
-	err = json.Unmarshal(totalSupplyPartitionBytes, supplyToken)
+	supplyToken := new(TotalSupplyByPartition)
+	err = json.Unmarshal(totalSupplyByPartitionBytes, supplyToken)
 	if err != nil {
 		return fmt.Errorf("failed to obtain JSON decoding: %v", err)
 	}
 
-	totalSupplyPartition := supplyToken.TotalSupply
-	updateTotalSupply := totalSupplyPartition - amount
+	totalSupplyByPartition := supplyToken.TotalSupply
+	updateTotalSupply := totalSupplyByPartition - amount
 	supplyToken.TotalSupply = updateTotalSupply
 
 	supplyTokenJSON, err := json.Marshal(supplyToken)
 	if err != nil {
 		return fmt.Errorf("failed to obtain JSON encoding: %v", err)
 	}
-	err = ctx.GetStub().PutState(totalSupplyPartitionKey, supplyTokenJSON)
+	err = ctx.GetStub().PutState(totalSupplyByPartitionKey, supplyTokenJSON)
 	if err != nil {
 		return fmt.Errorf("failed to put state: %v", err)
 	}
@@ -1041,7 +1072,6 @@ func (s *SmartContract) BurnByPartition(ctx contractapi.TransactionContextInterf
 	log.Printf("minter account %s balance updated from %s to %s", address, string(tokenBytes), string(tokenJSON))
 
 	return nil
-
 }
 
 // ClientAccountID returns the id of the requesting client's account
@@ -1061,7 +1091,7 @@ func (s *SmartContract) ClientAccountID(ctx contractapi.TransactionContextInterf
 	}
 
 	// owner Address
-	clientAccountID := getAddress([]byte(id))
+	clientAccountID := ccutils.GetAddress([]byte(id))
 
 	return clientAccountID, nil
 }
@@ -1081,7 +1111,7 @@ func (s *SmartContract) ClientAccountBalanceByPartition(ctx contractapi.Transact
 	}
 
 	// owner Address
-	owner := getAddress([]byte(id))
+	owner := ccutils.GetAddress([]byte(id))
 
 	// Create allowanceKey
 	clientPartitionKey, err := ctx.GetStub().CreateCompositeKey(clientByPartitionPrefix, []string{owner, _partition})
@@ -1110,33 +1140,4 @@ func (s *SmartContract) ClientAccountBalanceByPartition(ctx contractapi.Transact
 	}
 
 	return token.Partition.Amount, nil
-}
-
-func (s *SmartContract) TestGetSignedProposal(ctx contractapi.TransactionContextInterface) (int, error) {
-
-	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
-	err := _getMSPID(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	// Retrieve total supply of tokens from state of smart contract
-	totalSupplyBytes, err := ctx.GetStub().GetState(totalSupplyKey)
-	if err != nil {
-		return 0, fmt.Errorf("failed to retrieve total token supply: %v", err)
-	}
-
-	var totalSupply int
-
-	// If no tokens have been minted, return 0
-	if totalSupplyBytes == nil {
-		totalSupply = 0
-	} else {
-		totalSupply, _ = strconv.Atoi(string(totalSupplyBytes)) // Error handling not needed since Itoa() was used when setting the totalSupply, guaranteeing it was an integer.
-	}
-
-	log.Printf("TotalSupply: %d tokens", totalSupply)
-
-	return totalSupply, nil
-
 }
