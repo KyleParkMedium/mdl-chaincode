@@ -7,7 +7,8 @@ package main
 import (
 	"log"
 
-	"mdl-chaincode/chaincode"
+	"github.com/KyleParkMedium/mdl-chaincode/chaincode"
+	// "mdl-chaincode/chaincode"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )

@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"mdl-chaincode/chaincode/ccutils"
+
+	"github.com/KyleParkMedium/mdl-chaincode/chaincode/ccutils"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )

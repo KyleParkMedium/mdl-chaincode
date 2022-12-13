@@ -1,4 +1,4 @@
-module mdl-chaincode
+module github.com/KyleParkMedium/mdl-chaincode
 
 go 1.19
 

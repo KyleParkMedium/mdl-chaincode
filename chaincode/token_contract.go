@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"mdl-chaincode/chaincode/ccutils"
 	"strconv"
+
+	"github.com/KyleParkMedium/mdl-chaincode/chaincode/ccutils"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
