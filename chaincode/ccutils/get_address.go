@@ -8,6 +8,11 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+const (
+	// AddressLength is the expected length of the address
+	addressLength = 20
+)
+
 // Errors
 var (
 	ErrEmptyString   = &decError{"empty hex string"}
