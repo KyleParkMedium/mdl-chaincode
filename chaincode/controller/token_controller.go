@@ -2,17 +2,16 @@ package controller
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/KyleParkMedium/mdl-chaincode/chaincode/ccutils"
 	"github.com/KyleParkMedium/mdl-chaincode/chaincode/services/token"
-	"github.com/KyleParkMedium/mdl-chaincode/chaincode/test"
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
 
 // SmartContract provides functions for transferring tokens between accounts
 type SmartContract struct {
-	test.SmartContract
-	// chaincode.SmartContract
+	contractapi.Contract
 }
 
 // ERC20 Strandard Code
@@ -27,8 +26,6 @@ func (s *SmartContract) TotalSupply(ctx contractapi.TransactionContextInterface)
 		return nil, err
 	}
 
-	// log.Printf("TotalSupply: %d tokens", totalSupply)
-
 	totalSupply, err := token.TotalSupply(ctx)
 	if err != nil {
 		return ccutils.GenerateErrorResponse(err)
@@ -38,6 +35,8 @@ func (s *SmartContract) TotalSupply(ctx contractapi.TransactionContextInterface)
 	if err != nil {
 		return ccutils.GenerateErrorResponse(err)
 	}
+
+	log.Printf("TotalSupply: %d tokens", totalSupply)
 
 	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], retData)
 }
@@ -109,35 +108,29 @@ func (s *SmartContract) BalanceOfByPartition(ctx contractapi.TransactionContextI
 		return ccutils.GenerateErrorResponse(err)
 	}
 
-	// int 값은 리턴을 어떻게 해줄건지 고민을 해보자능
-	// retData, err := ccutils.StructToMap(balanceOfByPartition)
-	// if err != nil {
-	// 	return ccutils.GenerateErrorResponse(err)
-	// }
-
 	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], balanceOfByPartition)
 }
 
-func (s *SmartContract) AllowanceByPartition(ctx contractapi.TransactionContextInterface, args map[string]interface{}, skip bool) (*ccutils.Response, error) {
-	if !skip {
-		// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
-		err := ccutils.GetMSPID(ctx)
-		if err != nil {
-			return nil, err
-		}
+func (s *SmartContract) AllowanceByPartition(ctx contractapi.TransactionContextInterface, args map[string]interface{}) (*ccutils.Response, error) {
 
-		requireParameterFields := []string{token.FieldOwner, token.FieldSpender, token.FieldPartition}
-		err = ccutils.CheckRequireParameter(requireParameterFields, args)
-		if err != nil {
-			return ccutils.GenerateErrorResponse(err)
-		}
-
-		stringParameterFields := []string{token.FieldOwner, token.FieldSpender, token.FieldPartition}
-		err = ccutils.CheckRequireTypeString(stringParameterFields, args)
-		if err != nil {
-			return ccutils.GenerateErrorResponse(err)
-		}
+	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
+	err := ccutils.GetMSPID(ctx)
+	if err != nil {
+		return nil, err
 	}
+
+	requireParameterFields := []string{token.FieldOwner, token.FieldSpender, token.FieldPartition}
+	err = ccutils.CheckRequireParameter(requireParameterFields, args)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
+
+	stringParameterFields := []string{token.FieldOwner, token.FieldSpender, token.FieldPartition}
+	err = ccutils.CheckRequireTypeString(stringParameterFields, args)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
+
 	owner := args[token.FieldOwner].(string)
 	spender := args[token.FieldSpender].(string)
 	partition := args[token.FieldPartition].(string)
@@ -147,19 +140,16 @@ func (s *SmartContract) AllowanceByPartition(ctx contractapi.TransactionContextI
 		return ccutils.GenerateErrorResponse(err)
 	}
 
-	// retData, err := ccutils.StructToMap(allowanceByPartition)
-	// if err != nil {
-	// 	return ccutils.GenerateErrorResponse(err)
-	// }
+	retData, err := ccutils.StructToMap(allowanceByPartition)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
 
-	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], allowanceByPartition.Amount)
-
-	// if skip {
-	// }
-	// return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], retData)
+	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], retData)
 }
 
 func (s *SmartContract) ApproveByPartition(ctx contractapi.TransactionContextInterface, args map[string]interface{}) (*ccutils.Response, error) {
+
 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
 	err := ccutils.GetMSPID(ctx)
 	if err != nil {
@@ -199,10 +189,17 @@ func (s *SmartContract) ApproveByPartition(ctx contractapi.TransactionContextInt
 		return ccutils.GenerateErrorResponse(err)
 	}
 
+	transferEvent := ccutils.Event{ctx.GetStub().GetTxID(), "Approval", owner, spender, partition, amount}
+	err = transferEvent.EmitTransferEvent(ctx)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
+
 	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], nil)
 }
 
 func (s *SmartContract) IncreaseAllowanceByPartition(ctx contractapi.TransactionContextInterface, args map[string]interface{}) (*ccutils.Response, error) {
+
 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
 	err := ccutils.GetMSPID(ctx)
 	if err != nil {
@@ -232,9 +229,8 @@ func (s *SmartContract) IncreaseAllowanceByPartition(ctx contractapi.Transaction
 		return ccutils.GenerateErrorResponse(err)
 	}
 
-	// owner Address
+	// args Data
 	owner := ccutils.GetAddress([]byte(id))
-	fmt.Println(owner)
 	spender := args[token.FieldSpender].(string)
 	partition := args[token.FieldPartition].(string)
 	addedValue := int64(args[token.FieldAmount].(float64))
@@ -243,20 +239,29 @@ func (s *SmartContract) IncreaseAllowanceByPartition(ctx contractapi.Transaction
 		return nil, fmt.Errorf("addValue cannot be negative")
 	}
 
-	skip := true
-	allowance, err := s.AllowanceByPartition(ctx, args, skip)
+	allowanceByPartition, err := token.AllowanceByPartition(ctx, owner, spender, partition)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
 
-	// allowanceValue := allowance.Data.(int64)
+	allowance := allowanceByPartition.Amount
 
-	// err = _approveByPartition(ctx, owner, spender, partition, allowanceValue+addedValue)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	err = _approveByPartition(ctx, owner, spender, partition, allowance+addedValue)
+	if err != nil {
+		return nil, err
+	}
+
+	transferEvent := ccutils.Event{ctx.GetStub().GetTxID(), "Approval", owner, spender, partition, addedValue}
+	err = transferEvent.EmitTransferEvent(ctx)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
 
 	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], nil)
 }
 
 func (s *SmartContract) DecreaseAllowanceByPartition(ctx contractapi.TransactionContextInterface, args map[string]interface{}) (*ccutils.Response, error) {
+
 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
 	err := ccutils.GetMSPID(ctx)
 	if err != nil {
@@ -286,31 +291,36 @@ func (s *SmartContract) DecreaseAllowanceByPartition(ctx contractapi.Transaction
 		return ccutils.GenerateErrorResponse(err)
 	}
 
-	// owner Address
+	// args Data
 	owner := ccutils.GetAddress([]byte(id))
 	spender := args[token.FieldSpender].(string)
 	partition := args[token.FieldPartition].(string)
 	subtractedValue := int64(args[token.FieldAmount].(float64))
 
-	if subtractedValue <= 0 { // transfer of 0 is allowed in ERC-20, so just validate against negative amounts
+	if subtractedValue <= 0 {
+		// transfer of 0 is allowed in ERC-20, so just validate against negative amounts
 		return nil, fmt.Errorf("subtractedValue cannot be negative")
 	}
 
-	skip := true
-	allowance, err := s.AllowanceByPartition(ctx, args, skip)
-
-	allowanceValue := allowance.Data.(int64)
-
-	if allowanceValue < subtractedValue {
-		return ccutils.GenerateErrorResponse(err)
-		// return nil, fmt.Errorf("The subtraction is greater than the allowable amount. ERC20: decreased allowance below zero : %v", err)
-	}
-
-	err = _approveByPartition(ctx, owner, spender, partition, allowanceValue-subtractedValue)
+	allowanceByPartition, err := token.AllowanceByPartition(ctx, owner, spender, partition)
 	if err != nil {
 		return ccutils.GenerateErrorResponse(err)
-		// return nil, err
+	}
 
+	allowance := allowanceByPartition.Amount
+	if allowance < subtractedValue {
+		return nil, fmt.Errorf("The subtraction is greater than the allowable amount. ERC20: decreased allowance below zero : %v", err)
+	}
+
+	err = _approveByPartition(ctx, owner, spender, partition, allowance-subtractedValue)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
+
+	transferEvent := ccutils.Event{ctx.GetStub().GetTxID(), "Approval", owner, spender, partition, subtractedValue}
+	err = transferEvent.EmitTransferEvent(ctx)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
 	}
 
 	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], nil)
@@ -329,6 +339,7 @@ func _approveByPartition(ctx contractapi.TransactionContextInterface, owner stri
 }
 
 func (s *SmartContract) IssuanceAsset(ctx contractapi.TransactionContextInterface, args map[string]interface{}) (*ccutils.Response, error) {
+
 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
 	err := ccutils.GetMSPID(ctx)
 	if err != nil {
@@ -367,11 +378,16 @@ func (s *SmartContract) IssuanceAsset(ctx contractapi.TransactionContextInterfac
 		return ccutils.GenerateErrorResponse(err)
 	}
 
+	transferEvent := ccutils.Event{ctx.GetStub().GetTxID(), "Issue", address, "", partition, 0}
+	err = transferEvent.EmitTransferEvent(ctx)
+	if err != nil {
+		return ccutils.GenerateErrorResponse(err)
+	}
+
 	retData, err := ccutils.StructToMap(asset)
 	if err != nil {
 		return ccutils.GenerateErrorResponse(err)
 	}
 
 	return ccutils.GenerateSuccessResponse(ctx.GetStub().GetTxID(), ccutils.ChaincodeSuccess, ccutils.CodeMessage[ccutils.ChaincodeSuccess], retData)
-
 }

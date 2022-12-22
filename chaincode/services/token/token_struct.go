@@ -7,25 +7,9 @@ const (
 	DocType_Allowance              = "DOCTYPE_ALLOWANCE"
 	DocType_Test                   = "DOCTYPE_TEST"
 
-	BalancePrefix = "balancePrefix"
-
-	// Define key names for options
-	totalSupplyKey = "totalSupply"
-	tokenName      = "mdl"
-
-	// Define objectType names by partition for prefix
-	totalSupplyByPartitionPrefix = "totalSupplyByPartition"
-
-	// _allowances
+	// Prefix
+	BalanceOfByPartitionPrefix = "balancePrefix"
 	allowanceByPartitionPrefix = "allowanceByPartition"
-
-	// issue or mint partition token
-	mintingByPartitionPrefix = "mintingByPartition"
-	clientByPartitionPrefix  = "clientByPartition"
-
-	clientBalancePrefix = "clientWallet"
-
-	operatorForPartitionPrefix = "operatorForPartition"
 )
 
 // totalSupply
@@ -85,8 +69,4 @@ type PartitionToken struct {
 	ExpiredDate string `json:"expiredDate"`
 
 	Amount int64 `json:"amount"`
-
-	// 요기가 fix 될 예정
-	// 여기는 이제 사라짐
-	// Partition Partition `json:"partition"`
 }

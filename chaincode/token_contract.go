@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/KyleParkMedium/mdl-chaincode/chaincode/ccutils"
+	"github.com/KyleParkMedium/mdl-chaincode/chaincode/controller"
 	"github.com/KyleParkMedium/mdl-chaincode/chaincode/ledgermanager"
 	"github.com/KyleParkMedium/mdl-chaincode/chaincode/services/token"
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
@@ -18,13 +19,9 @@ const (
 	ChaincodeVersion = "0.0.2"
 )
 
-const (
-	clientByPartitionPrefix = "clientByPartition"
-)
-
 // SmartContract provides functions for transferring tokens between accounts
 type SmartContract struct {
-	contractapi.Contract
+	controller.SmartContract
 }
 
 // event provides an organized struct for emitting events
@@ -52,7 +49,7 @@ func (s *SmartContract) IsInit(ctx contractapi.TransactionContextInterface) erro
 		return err
 	}
 
-	// totalsupply
+	// Init totalSupply
 	_, err = ledgermanager.PutState(token.DocType_TotalSupply, "TotalSupply", token.TotalSupplyStruct{TotalSupply: 0}, ctx)
 	if err != nil {
 		// return ccutils.GenerateErrorResponse(err)
@@ -85,8 +82,7 @@ func (s *SmartContract) Init(ctx contractapi.TransactionContextInterface) (strin
 }
 
 // msgSender 등 이더리움 함수 이름 대로 두고 싶었는데, Go에서 소문자가 public 호출이 안되니까 그냥 아쉬워서 냅둠 ㅠ ㅋ
-/** 호출자 Address(shim / ctx.GetClientIdentity().GetID() 모듈화)
- */
+// 호출자 Address(shim / ctx.GetClientIdentity().GetID() 모듈화)
 func _msgSender(ctx contractapi.TransactionContextInterface) (string, error) {
 
 	// Get ID of submitting client identity

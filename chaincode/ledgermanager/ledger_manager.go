@@ -21,13 +21,13 @@ func PutState(docType string, key string, data interface{}, ctx contractapi.Tran
 	}
 
 	exist, err := CheckExistState(key, ctx)
+	// 에러 체크
 	if err != nil {
-		// 에러 체크
 		return "", err
 	}
 
+	// 이미 존재하는지 체크
 	if exist {
-		// 이미 존재하는지 체크
 		return "", ccutils.CreateError(CodeErrorPutStateAlreadyExist, fmt.Errorf(ErrorCodeMessage[CodeErrorPutStateAlreadyExist]+" : "+key))
 	}
 
@@ -41,16 +41,17 @@ func PutState(docType string, key string, data interface{}, ctx contractapi.Tran
 		dataMap[ID] = ccutils.GenerateUniqueID(64)
 	}
 
-	if value, _ := dataMap[CreatedDate]; value == "" {
-		dataMap[CreatedDate] = ccutils.CreateKstTimeAndSecond()
-	} else {
-		err := ccutils.CheckFormatDateAndSecond([]string{CreatedDate}, dataMap)
-		if err != nil {
-			return "", err
-		}
-	}
+	// time format binding 문제로 임시 주석 처리
+	// if value, _ := dataMap[CreatedDate]; value == "" {
+	// 	dataMap[CreatedDate] = ccutils.CreateKstTimeAndSecond()
+	// } else {
+	// 	err := ccutils.CheckFormatDateAndSecond([]string{CreatedDate}, dataMap)
+	// 	if err != nil {
+	// 		return "", err
+	// 	}
+	// }
 
-	dataMap[UpdatedDate] = dataMap[CreatedDate]
+	// dataMap[UpdatedDate] = dataMap[CreatedDate]
 	dataMap[TxId] = ctx.GetStub().GetTxID()
 
 	var dataBytes []byte
@@ -94,10 +95,11 @@ func UpdateState(docType string, key string, data map[string]interface{}, ctx co
 		return err
 	}
 
-	// 존재하지 않는 키값
-	if asIsDataBytes == nil {
-		return ccutils.CreateError(CodeErrorUpdateStateEmptyState, fmt.Errorf(ErrorCodeMessage[CodeErrorUpdateStateEmptyState]+" : "+key))
-	}
+	// 이거 일단 주석 처리 해서 경과 파악 필요 없는 코드 인데
+	// // 존재하지 않는 키값
+	// if asIsDataBytes == nil {
+	// 	return ccutils.CreateError(CodeErrorUpdateStateEmptyState, fmt.Errorf(ErrorCodeMessage[CodeErrorUpdateStateEmptyState]+" : "+key))
+	// }
 
 	asIsMap := make(map[string]interface{})
 	err = json.Unmarshal(asIsDataBytes, &asIsMap)
@@ -132,15 +134,15 @@ func UpdateState(docType string, key string, data map[string]interface{}, ctx co
 		asIsMap[DocType] = docType
 	}
 
-	// updatedDate가 없으면 입력
-	if _, exist := toBeMap[UpdatedDate]; !exist {
-		asIsMap[UpdatedDate] = ccutils.CreateKstTimeAndSecond()
-	} else {
-		err := ccutils.CheckFormatDateAndSecond([]string{UpdatedDate}, asIsMap)
-		if err != nil {
-			return err
-		}
-	}
+	// // updatedDate가 없으면 입력
+	// if _, exist := toBeMap[UpdatedDate]; !exist {
+	// 	asIsMap[UpdatedDate] = ccutils.CreateKstTimeAndSecond()
+	// } else {
+	// 	err := ccutils.CheckFormatDateAndSecond([]string{UpdatedDate}, asIsMap)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	if asIsDataBytes, err = json.Marshal(asIsMap); err != nil {
 		return ccutils.CreateError(ccutils.ChaincodeError, err)

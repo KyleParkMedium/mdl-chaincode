@@ -6,8 +6,9 @@ import (
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
 
+// Get ID of submitting client identity
 func GetID(ctx contractapi.TransactionContextInterface) (string, error) {
-	// Get ID of submitting client identity
+
 	id, err := ctx.GetClientIdentity().GetID()
 	if err != nil {
 		return "", fmt.Errorf("failed to get client id: %v", err)
@@ -16,8 +17,9 @@ func GetID(ctx contractapi.TransactionContextInterface) (string, error) {
 	return id, nil
 }
 
+// Get MSPID of submitting client identity
 func GetMSPID(ctx contractapi.TransactionContextInterface) error {
-	// Get ID of submitting client identity
+
 	_, err := ctx.GetClientIdentity().GetMSPID()
 	if err != nil {
 		return fmt.Errorf("failed to get client id: %v", err)

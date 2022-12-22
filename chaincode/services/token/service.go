@@ -21,6 +21,7 @@ func TotalSupply(ctx contractapi.TransactionContextInterface) (*TotalSupplyStruc
 	if err := json.Unmarshal(totalSupplyBytes, &totalSupply); err != nil {
 		return nil, err
 	}
+
 	return &totalSupply, nil
 }
 
@@ -35,18 +36,18 @@ func TotalSupplyByPartition(ctx contractapi.TransactionContextInterface, partiti
 	if err := json.Unmarshal(totalSupplyBytes, &totalSupplyByPartition); err != nil {
 		return nil, err
 	}
+
 	return &totalSupplyByPartition, nil
 }
 
 func BalanceOfByPartition(ctx contractapi.TransactionContextInterface, _tokenHolder string, _partition string) (int64, error) {
 
 	// Create allowanceKey
-	walletKey, err := ctx.GetStub().CreateCompositeKey(BalancePrefix, []string{_tokenHolder, _partition})
+	walletKey, err := ctx.GetStub().CreateCompositeKey(BalanceOfByPartitionPrefix, []string{_tokenHolder, _partition})
 	if err != nil {
-		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", BalancePrefix, err)
+		return 0, fmt.Errorf("failed to create the composite key for prefix %s: %v", BalanceOfByPartitionPrefix, err)
 	}
 
-	// key 어떻게 할건지
 	partitionTokenBytes, err := ledgermanager.GetState(DocType_Token, walletKey, ctx)
 	if err != nil {
 		return 0, err
@@ -56,6 +57,7 @@ func BalanceOfByPartition(ctx contractapi.TransactionContextInterface, _tokenHol
 	if err := json.Unmarshal(partitionTokenBytes, &partitionToken); err != nil {
 		return 0, err
 	}
+
 	return partitionToken.Amount, nil
 }
 
@@ -76,6 +78,7 @@ func AllowanceByPartition(ctx contractapi.TransactionContextInterface, owner str
 	if err := json.Unmarshal(allowanceBytes, &allowanceByPartition); err != nil {
 		return nil, err
 	}
+
 	return &allowanceByPartition, nil
 }
 
@@ -111,16 +114,7 @@ func ApproveByPartition(ctx contractapi.TransactionContextInterface, allowanceBy
 
 func IssuanceAsset(ctx contractapi.TransactionContextInterface, token PartitionToken) (*PartitionToken, error) {
 
-	// // key 어떻게 할건지
-	// tokenBytes, err := ledgermanager.GetState(DocType_Token, token.TokenID, ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if tokenBytes != nil {
-	// 	return nil, fmt.Errorf("The asset is already registered : %s, %v", token.TokenID, err)
-	// }
-
-	// token
+	// issuanceAsset
 	_, err := ledgermanager.PutState(DocType_Token, token.TokenID, token, ctx)
 	if err != nil {
 		return nil, err
@@ -134,61 +128,3 @@ func IssuanceAsset(ctx contractapi.TransactionContextInterface, token PartitionT
 
 	return &token, nil
 }
-
-// /** 사용자 지갑 생성 */
-// func (s *SmartContract) CreateWalletMB(ctx contractapi.TransactionContextInterface, args map[string]interface{}) (string, error) {
-
-// 	// Check minter authorization - this sample assumes Org1 is the central banker with privilege to mint new tokens
-// 	err := _getMSPID(ctx)
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	id, err := _msgSender(ctx)
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	// owner Address
-// 	owner := ccutils.GetAddress([]byte(id))
-
-// 	// Create allowanceKey
-// 	clientKey, err := ctx.GetStub().CreateCompositeKey(clientBalancePrefix, []string{owner})
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to create the composite key for prefix %s: %v", clientBalancePrefix, err)
-// 	}
-
-// 	clientWalletBytes, err := ctx.GetStub().GetState(clientKey)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to read minter account from world state: %v", err)
-// 	}
-// 	if clientWalletBytes != nil {
-// 		return "", fmt.Errorf("client %s has been already registered: %v", owner, err)
-// 	}
-
-// 	wallet := Wallet{Name: owner}
-
-// 	walletJSON, err := json.Marshal(wallet)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to obtain JSON encoding: %v", err)
-// 	}
-// 	err = ctx.GetStub().PutState(clientKey, walletJSON)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to put state: %v", err)
-// 	}
-
-// 	log.Printf("client account %s registered", owner)
-
-// 	return owner, nil
-// }
-
-// /** 파티션별 사용자 업데이트 */
-// func (s *SmartContract) PartitionArrayUpdate(ctx contractapi.TransactionContextInterface, partition string) (string, error) {
-
-// 	// 원장에 업데이트가 될텐데
-// 	// 이들을 key로 구분?
-// 	// 아니면 key로 불러와 다시 특정 구조체로 파싱하는 것까지?
-
-// 	return "hi", nil
-
-// }

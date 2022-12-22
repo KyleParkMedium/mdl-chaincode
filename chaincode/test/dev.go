@@ -12,8 +12,8 @@ const (
 	allowanceByPartitionPrefix = "allowanceByPartition"
 
 	// issue or mint partition token
-	mintingByPartitionPrefix = "mintingByPartition"
-	clientBalancePrefix      = "clientWallet"
+	mintingByPartitionPrefix         = "mintingByPartition"
+	clientBalanceOfByPartitionPrefix = "clientWallet"
 
 	operatorForPartitionPrefix = "operatorForPartition"
 )

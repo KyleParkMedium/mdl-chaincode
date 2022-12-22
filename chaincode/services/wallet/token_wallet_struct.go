@@ -6,13 +6,6 @@ const (
 	DocType_TokenWallet = "DOCTYPE_TOKEN_WALLET"
 )
 
-type TW struct {
-	DocType string `json:"docType"`
-
-	Name string `json:"name"`
-}
-
-// address or wallet
 type TokenWallet struct {
 	DocType string `json:"docType"`
 
@@ -36,6 +29,7 @@ type TokenWallet struct {
 	PartitionTokens map[string][]token.PartitionToken `json:"partitionTokens"`
 }
 
+// 리시버 훅은 한번 만들어볼지 고민 중
 // func (t *TokenWallet) SubBalance(amount int64) error {
 // 	if t.Balance < amount {
 // 		return ccutils.CreateError(ccutils.ChaincodeError, fmt.Errorf("not enough balance"))
